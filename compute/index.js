@@ -146,7 +146,7 @@ export class compute {
                 wasmReady.then((wasmInstance) => {
                     parentPort.postMessage({
                         type: "result",
-                        result: wasmInstance[name].apply(null, [threadID, ...args]),
+                        value: wasmInstance[name].apply(null, [threadID, ...args]),
                         threadID: threadID,
                         id: id
                     });
