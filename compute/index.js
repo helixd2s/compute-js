@@ -96,7 +96,7 @@ export class wrapresult {
     constructor(memory, results, threadID = 0){
         this.results = results;
         this.memory = memory;
-        this.threadID = 0;
+        this.threadID = threadID;
     }
 
     thread(threadID = 0) { return new this.constructor(this.memory, this.results, threadID); };
