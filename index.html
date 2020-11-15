@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>WebAssembly Compute Test</title>
+        <script>
+        (async ()=>{
+            
+            let compute = await import("./compute/index.js");
+            let request = await fetch("./build/optimized.wasm");
+
+            let kernel = new compute.compute({
+                assemblyCode: await request.arrayBuffer(),
+                threadCount: 6,
+                maxMemory: 65536*2
+            });
+            
+            // map offsets per threads
+            let map = 24; // memory offset of map
+            let ptr = kernel.mem(map).u64();
+            for (let i=0;i<12;i++) {
+                ptr.idx(i).value = BigInt(i * 4);
+            };
+
+            let results = await kernel.execute("main", map);
+            console.log(results.thread(0).u32().get(5));
+
+        })();
+        </script>
+    </head>
+    <body>
+        
+    </body>
+</html>
