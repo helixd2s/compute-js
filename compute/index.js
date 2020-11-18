@@ -150,70 +150,73 @@ export class compute {
         this.memory = new WebAssembly.Memory({ initial:1, maximum:Math.ceil(maxMemory/65536), shared: true });
 
         let driverURL = encodeDataURL(`
-            const parentPort = self;
+            (async()=>{
+                let parentPort = typeof self != "undefined" ? self : null;
 
-            if (typeof parentPort === "undefined") {
-                parentPort = require('worker_threads').parentPort;
-            }
+                if (!parentPort) {
+                    let WP = typeof require !== "undefined" ? require('worker_threads') : (await import('worker_threads'));
+                    parentPort = global.parentPort = WP.parentPort;
+                }
 
-            let wasmResolve;
-            let wasmReady = new Promise((resolve) => {
-                wasmResolve = resolve;
-            });
-
-            let threadInfo = {
-                id: 0
-            };
-
-            let execute = ({
-                type,
-                name,
-                id,
-                threadID,
-                args
-            }) => {
-                
-                wasmReady.then((wasmInstance) => {
-                    parentPort.postMessage({
-                        type: "result",
-                        value: wasmInstance[name].apply(null, args),
-                        threadID: threadID,
-                        id: id
-                    });
-                })
-                .catch((error) => {
-                    parentPort.postMessage({ id: id, type: "error", result: null });
-                })
-            };
-
-            let initialize = ({
-                type,
-                id,
-                threadID,
-                memory,
-                assemblyCode
-            })=>{
-                threadInfo.id = threadID;
-                WebAssembly.instantiate(assemblyCode, {
-                    env: {
-                        abort: function() { throw Error("abort called"); },
-                        memory: memory,
-                    },
-                    index: {
-                        "threadInfo.id": ()=>{
-                            return threadInfo.id;
-                        }
-                    }
-                }).then(instantiatedModule => {
-                    wasmResolve(instantiatedModule.instance.exports);
-                    parentPort.postMessage({ type: "initialized" });
+                let wasmResolve;
+                let wasmReady = new Promise((resolve) => {
+                    wasmResolve = resolve;
                 });
-            };
-            
-            parentPort.addEventListener('message', function(event) {
-                if (event.data.type == "initialize") { initialize(event.data); };
-                if (event.data.type == "execute") { execute(event.data); };
-            });
+
+                let threadInfo = {
+                    id: 0
+                };
+
+                let execute = ({
+                    type,
+                    name,
+                    id,
+                    threadID,
+                    args
+                }) => {
+                    
+                    wasmReady.then((wasmInstance) => {
+                        parentPort.postMessage({
+                            type: "result",
+                            value: wasmInstance[name].apply(null, args),
+                            threadID: threadID,
+                            id: id
+                        });
+                    })
+                    .catch((error) => {
+                        parentPort.postMessage({ id: id, type: "error", result: null });
+                    })
+                };
+
+                let initialize = ({
+                    type,
+                    id,
+                    threadID,
+                    memory,
+                    assemblyCode
+                })=>{
+                    threadInfo.id = threadID;
+                    WebAssembly.instantiate(assemblyCode, {
+                        env: {
+                            abort: function() { throw Error("abort called"); },
+                            memory: memory,
+                        },
+                        index: {
+                            "threadInfo.id": ()=>{
+                                return threadInfo.id;
+                            }
+                        }
+                    }).then(async (instantiatedModule) => {
+                        wasmResolve(instantiatedModule.instance.exports);
+                        parentPort.postMessage({ type: "initialized" });
+                    });
+                };
+                
+                parentPort.addEventListener('message', function(event) {
+                    if (event.data.type == "initialize") { initialize(event.data); };
+                    if (event.data.type == "execute") { execute(event.data); };
+                });
+            })();
         `, "text/javascript");
         
         this.threads = [];
