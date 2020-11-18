@@ -158,7 +158,7 @@ export class compute {
                     parentPort = global.parentPort = WP.parentPort;
                 }
 
-                let wasmResolve;
+                let wasmResolve = null;
                 let wasmReady = new Promise((resolve) => {
                     wasmResolve = resolve;
                 });
