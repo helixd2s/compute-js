@@ -29,6 +29,7 @@ function toArrayBuffer(buf) {
 (async ()=>{
     let code = fs.readFileSync(__dirname + "/../build/optimized.wasm");
 
+    await compute.worker(); // promise webworker for nodejs
     let kernel = new compute.compute({
         assemblyCode: toArrayBuffer(code),
         threadCount: 6,

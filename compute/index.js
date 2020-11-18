@@ -1,10 +1,21 @@
 
-if (Worker === undefined) {
-    Worker = require('worker_threads').Worker;
-}
+//import * as WT from 'worker_threads';
+
+let WP = new Promise(async (resolve, reject) => {
+    if (typeof Worker === "undefined") {
+        let WP = typeof require !== "undefined" ? require('worker_threads') : (await import('worker_threads'));
+        global.Worker = WP.Worker;
+        resolve(WP);
+    }
+});
+
+export function worker(){
+    return WP;
+};
+
 
 let encodeDataURL = (code, mime = "text/javascript") => {
-    if (URL !== undefined && Blob !== undefined) {
+    if (typeof URL !== "undefined" && typeof Blob !== "undefined") {
         return URL.createObjectURL(new Blob([code], { type: mime }));
     } else {
         return 'data:' + mime + ';' + 'base64' + ',' + Buffer.from(code).toString('base64');
@@ -141,7 +152,7 @@ export class compute {
         let driverURL = encodeDataURL(`
             const parentPort = self;
 
-            if (parentPort === undefined) {
+            if (typeof parentPort === "undefined") {
                 parentPort = require('worker_threads').parentPort;
             }
 
