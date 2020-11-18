@@ -1,6 +1,14 @@
+
+if (Worker === undefined) {
+    Worker = require('worker_threads').Worker;
+}
+
 let encodeDataURL = (code, mime = "text/javascript") => {
-    //return 'data:' + mime + ';' + 'base64' + ',' + btoa(code);
-    return URL.createObjectURL(new Blob([code], { type: mime }));
+    if (URL !== undefined && Blob !== undefined) {
+        return URL.createObjectURL(new Blob([code], { type: mime }));
+    } else {
+        return 'data:' + mime + ';' + 'base64' + ',' + Buffer.from(code).toString('base64');
+    }
 };
 
 export class wrapptr {
@@ -27,6 +35,9 @@ export class wrapptr {
     get address() { return this.array.byteOffset + this.index*this.array.BYTES_PER_ELEMENT; };
     get value() { return this.array[this.index]; };
     set value(a) { this.array[this.index] = a; };
+
+    // nodejs available only (with node-native library)
+    get address() { return this.array.address(); };
 };
 
 export class u8ptr extends wrapptr {
@@ -130,10 +141,18 @@ export class compute {
         let driverURL = encodeDataURL(`
             const parentPort = self;
 
+            if (parentPort === undefined) {
+                parentPort = require('worker_threads').parentPort;
+            }
+
             let wasmResolve;
             let wasmReady = new Promise((resolve) => {
                 wasmResolve = resolve;
             });
+
+            let threadInfo = {
+                id: 0
+            };
 
             let execute = ({
                 type,
@@ -146,7 +165,7 @@ export class compute {
                 wasmReady.then((wasmInstance) => {
                     parentPort.postMessage({
                         type: "result",
-                        value: wasmInstance[name].apply(null, [threadID, ...args]),
+                        value: wasmInstance[name].apply(null, args),
                         threadID: threadID,
                         id: id
                     });
@@ -163,15 +182,17 @@ export class compute {
                 memory,
                 assemblyCode
             })=>{
+                threadInfo.id = threadID;
                 WebAssembly.instantiate(assemblyCode, {
                     env: {
                         abort: function() { throw Error("abort called"); },
                         memory: memory,
                     },
-                    main: {
-                    },
-                    module: {},
-                    import: {}
+                    index: {
+                        "threadInfo.id": ()=>{
+                            return threadInfo.id;
+                        }
+                    }
                 }).then(instantiatedModule => {
                     wasmResolve(instantiatedModule.instance.exports);
                     parentPort.postMessage({ type: "initialized" });
@@ -187,7 +208,6 @@ export class compute {
         this.threads = [];
 
         let id = this.commandCount++;
-        
         for (let i=0;i<threadCount;i++) {
             let thread = new Worker(new URL(driverURL));
             
