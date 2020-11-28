@@ -2,31 +2,20 @@
 module;
 
 // TODO: rename "env" in WebAssembly code
-#define IMPORTS env
+#define ENV env
 #define NAME index
+#define EXPORT_NAME(n) __attribute__((export_name(n), visibility("default")))
 
 //
 export module NAME;
+import ENV;
 
-// that "IMPORTS"
-import IMPORTS;
-
-// WARNING! C++ DOES NOT SUPPORT "export defaults"
-// means "export NAME { ... }"
-//export namespace NAME
-//{
-
-    // export as webassembly function (but it's crutch)
-    //int add(int a, int b) asm("add");
-    
-    // means "export function(a, b)"
-    // but should works without crutch
-    export int add(int a, int b) {
-        IMPORTS::console_i32(a);
+// 
+export namespace NAME // For C++20 used
+{
+    // webassembly doesn't support export as object, only as export defaults (you can try rename as "index.add")
+    int add(int a, int b) EXPORT_NAME("add") {
+        ENV::console_i32(a);
         return a*a + b;
     }
-
-//};
-
-// means "export defaults", but not supported by C++20
-//export using namespace NAME; // commented for C++ specification
+};

@@ -19,6 +19,6 @@ clang++ ^
   -fmodule-file=env.pcm ^
   -c add.cppm ^
   -o add.o 
-wasm-ld --no-entry --export-all --allow-undefined -o add.wasm add.o
+wasm-ld --no-entry --export-dynamic --allow-undefined --demangle --threads=6 -o add.wasm add.o
 wasm2wat add.wasm -o add.wat
 pause

@@ -2,21 +2,17 @@
 module;
 
 // TODO: rename "env" in WebAssembly code into "imports"
+#define STR(x) #x
 #define NAME env
+#define IMPORT_NAME(n) __attribute__((import_name(n), import_module("env"), visibility("default")))
 
 //
 export module NAME;
 
-// should be remedy by JavaScript
-export namespace NAME {
-    // crutch
-    //extern int console_i32(const int value) asm("console_i32");
-    //extern int console(const char* string, const int size) asm("console");
-    
-    // export external functions
-    extern int console_i32(const int value);
-    extern int console(const char* string, const int size);
+// 
+export namespace NAME // For C++20 
+{
+    // 
+    extern int console_i32(const int value) IMPORT_NAME("console_i32");
+    extern int console(const char* string, const int size) IMPORT_NAME("console");
 };
-
-// means "export defaults" (not prefer here)
-//export using namespace NAME;
