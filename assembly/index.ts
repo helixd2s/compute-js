@@ -8,9 +8,13 @@ declare namespace threadInfo {
   function id(): u32;
 }
 
-export function main(managedMemory: usize): usize {
-  let tip: u32 = threadInfo.id();
+export function threaded(tip: u32, managedMemory: usize) {
   let ptr: usize = load<usize>(managedMemory+tip*8);
   store<u32>(ptr, tip);
   return ptr;
+}
+
+// executor (in C++ it harder)
+export function main(managedMemory: usize): usize {
+  threaded(threadInfo.id(), managedMemory);
 }

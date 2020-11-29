@@ -147,7 +147,7 @@ export class compute {
         this.commandCount = 0;
         this.results = {};
         this.threadCount = threadCount;
-        this.memory = new WebAssembly.Memory({ initial:1, maximum:Math.ceil(maxMemory/65536), shared: true });
+        this.memory = new WebAssembly.Memory({ initial:256, maximum:Math.max(256,Math.ceil(maxMemory/65536)), shared: true });
 
         let driverURL = encodeDataURL(`
             (async()=>{
@@ -178,7 +178,7 @@ export class compute {
                     wasmReady.then((wasmInstance) => {
                         parentPort.postMessage({
                             type: "result",
-                            value: wasmInstance[name].apply(null, args),
+                            value: wasmInstance[name].apply(null, [threadID, ...args]),
                             threadID: threadID,
                             id: id
                         });

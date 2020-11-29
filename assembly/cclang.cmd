@@ -1,30 +1,24 @@
 ::-emit-llvm -c -S 
-call em++ ^
-  --target=wasm32 -O2 ^
+call clang++ ^
+  --target=wasm32 -O3 ^
   -Xclang ^
   -std=c++20 ^
   -fmodules-ts ^
   -fmodules ^
-  -emit-llvm ^
   --precompile ^
   -x c++-module ^
-  -s USE_PTHREADS=1 -lpthread ^
   -nostdlib ^
-  -D__EMSCRIPTEN__ ^
   -c ./env.cpp ^
   -o ./env.pcm
-call em++ ^
-  --target=wasm32 -O2 ^
+call clang++ ^
+  --target=wasm32 -O3 ^
   -Xclang ^
   -std=c++20 ^
   -fmodules-ts ^
   -fmodules ^
-  -emit-llvm -x c++-module ^
+  -x c++-module ^
   -fprebuilt-module-path=. ^
-  -s USE_PTHREADS=1 -lpthread ^
-  -s ERROR_ON_UNDEFINED_SYMBOLS=0 ^
   -nostdlib ^
-  -D__EMSCRIPTEN__ ^
   -Wl,--no-entry -Wl,--export-dynamic -Wl,--allow-undefined -Wl,--demangle ^
      ./test.cpp ^
   -o ./test.js

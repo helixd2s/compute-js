@@ -1,7 +1,7 @@
 // it is webassembly module "assembly"
 module;
 
-// TODO: rename "env" in WebAssembly code into "imports"
+// TODO: rename "env" in WebAssembly code into "env"
 #define STR(x) #x
 #define NAME env
 #define IMPORT_NAME(n) __attribute__((import_name(n), import_module("env"), visibility("default")))
