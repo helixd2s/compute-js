@@ -6,11 +6,6 @@ module;
 #define NAME add
 #define EXPORT_NAME(n) __attribute__((export_name(n), visibility("default"))) 
 
-// 
-#ifndef EMSCRIPTEN_KEEPALIVE
-#define EMSCRIPTEN_KEEPALIVE 
-#endif
-
 // NOT working without standard library
 //#include <emscripten/threading.h>
 
@@ -33,7 +28,7 @@ import <future>;
 export namespace NAME // For C++20 used
 {
     // webassembly doesn't support export as object, only as export defaults (you can try rename as "index.add")
-    int* EMSCRIPTEN_KEEPALIVE threaded(int threadId, int** managedMemory) EXPORT_NAME("threaded") {
+    int* threaded(int threadId, int** managedMemory) EXPORT_NAME("threaded") {
         //managedMemory[threadId] = threadId;
         *(managedMemory[threadId]) = threadId;
         return managedMemory[threadId];
@@ -41,7 +36,7 @@ export namespace NAME // For C++20 used
     
     // это говно годиться только для монолитных приложений
 #ifdef ENABLE_PTHREADS
-    int* EMSCRIPTEN_KEEPALIVE execute(uint32_t* managedMemory) EXPORT_NAME("execute") {
+    int* execute(uint32_t* managedMemory) EXPORT_NAME("execute") {
         //std::vector<int> results(6);
         int* results = allocate_int(6);
         std::vector<std::future<int>> resultsDefer = {};
@@ -58,7 +53,7 @@ export namespace NAME // For C++20 used
     }
 #endif
     
-    int EMSCRIPTEN_KEEPALIVE add(atomic_int a, atomic_int b) EXPORT_NAME("add") {
+    int add(atomic_int a, atomic_int b) EXPORT_NAME("add") {
         return atomic_fetch_add(&a, b);
     }
 };
