@@ -34,6 +34,11 @@ export namespace NAME // For C++20 used
         return managedMemory[threadId];
     }
     
+    // f&ck, it requires external allocator
+    //int* allocate_int(int count) EXPORT_NAME("allocate_int") {
+    //    return new int(count);
+    //}
+    
     // это говно годиться только для монолитных приложений
 #ifdef ENABLE_PTHREADS
     int* execute(uint32_t* managedMemory) EXPORT_NAME("execute") {
