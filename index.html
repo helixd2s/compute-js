@@ -24,11 +24,10 @@
             });
 
             // 
-            let ptr = device.mem(24);//device.allocate({
-                //byteSize: 12*8
-            //});
+            let ptr = device.mem(64);
+            //let ptr = device.allocate({ byteSize: 12*8 });
 
-            // 
+            // map into specific address
             let map = ptr.u64();
             for (let i=0;i<12;i++) {
                 map.idx(i).value = BigInt(i * 4);
