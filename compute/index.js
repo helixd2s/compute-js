@@ -1,6 +1,8 @@
 
 //import * as WT from 'worker_threads';
 
+import { ThisExpression } from 'assemblyscript';
+
 let WP = new Promise(async (resolve, reject) => {
     if (typeof Worker === "undefined") {
         let WP = typeof require !== "undefined" ? require('worker_threads') : (await import('worker_threads'));
@@ -139,15 +141,27 @@ export class wrapresult {
     f64(threadID = 0) { return new f64ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
 };
 
-export class compute {
+
+
+export class program {
     constructor({
-        assemblyCode = null, threadCount = 4, 
-        maxMemory = 65536
+        assemblyCode = null
+    }){
+        this.assemblyCode = assemblyCode;
+    }
+};
+
+export class device {
+    constructor({
+        threadCount = 4, 
+        maxMemory = 65536,
+        allocator = null
     }){
         this.commandCount = 0;
         this.results = {};
         this.threadCount = threadCount;
         this.memory = new WebAssembly.Memory({ initial:256, maximum:Math.max(256,Math.ceil(maxMemory/65536)), shared: true });
+        this.allocator_ = allocator;
 
         let driverURL = encodeDataURL(`
             (async()=>{
@@ -221,7 +235,7 @@ export class compute {
         
         this.threads = [];
 
-        let id = this.commandCount++;
+        let id = this.commandCount;
         for (let i=0;i<threadCount;i++) {
             let thread = new Worker(new URL(driverURL));
             
@@ -234,19 +248,38 @@ export class compute {
                 };
             };
             
-            let clonedCode = assemblyCode.slice(0);
-            thread.postMessage({
+            this.threads.push(thread);
+        };
+        
+    }
+
+    allocator(allocator) {
+        this.allocator_ = allocator;
+    }
+
+    bindProgram_(program) {
+        let clonedCode = program.assemblyCode.slice(0);
+        let id = this.commandCount++;
+        this.results[id] = [];
+        this.program = program;
+        for (let i=0;i<threadCount;i++) {
+            let resolveReject = {};
+            let promise = new Promise((resolve, reject)=>{
+                resolveReject.resolve = resolve;
+                resolveReject.reject = reject;
+            });
+            this.results[id].push(Object.assign(promise, resolveReject));
+            this.threads[i].postMessage({
                 type: "initialize",
                 id: id,
                 threadID: i,
                 memory: this.memory,
                 assemblyCode: clonedCode
             }, [clonedCode]);
-            this.threads.push(thread);
         };
-        
-    };
-    
+        return Promise.all(this.results[id]);
+    }
+
     execute_(name = "main", ...args) {
         let id = this.commandCount++;
         this.results[id] = [];
@@ -266,13 +299,31 @@ export class compute {
             });
         };
         return Promise.all(this.results[id]);
-    };
+    }
 
     mem(address) {
         return new wrapresult(this.memory, (new Array(this.threadCount)).fill(address, 0, this.threadCount));
     }
 
-    async execute(name = "main", ...args) {
+    allocate(options) {
+        return this.allocator_.allocate(options.byteSize);
+    }
+
+    async execute(program, name = "main", args) {
+        await Promise.all(this.results[this.commandCount-1]); // wait queue
+        if (this.program != program) {
+            await this.bindProgram_(program);
+            await Promise.all(this.results[this.commandCount-1]); // wait queue
+        };
         return new wrapresult(this.memory, await this.execute_(name, ...args));
-    };
+    }
+};
+
+export async function wasmModule(device, code){
+    return (await WebAssembly.instantiate(assemblyCode, {
+        env: {
+            abort: function() { throw Error("abort called"); },
+            memory: device.memory
+        }
+    }));
 };
