@@ -6,9 +6,10 @@
         (async ()=>{
             
             let compute = await import("./compute/index.js");
-            let request = await fetch("./assembly/test.wasm");
+            let request = await fetch("./build/optimized.wasm");
             //let code = await fetch("./assembly/allocator.wasm");
 
+            
             // 
             let device = new compute.device({
                 threadCount: 6,
@@ -24,18 +25,19 @@
             });
 
             // 
+            let out = device.mem(0);
             let ptr = device.mem(64);
             //let ptr = device.allocate({ byteSize: 12*8 });
 
             // map into specific address
             let map = ptr.u64();
-            for (let i=0;i<12;i++) {
-                map.idx(i).value = BigInt(i * 4);
-            };
+            for (let i=0;i<12;i++) { map[i] = BigInt(i * 4); };
 
             // 
-            let results = await device.execute(kernel, "threaded", [ptr.address()]);
-            console.log(results.thread(5).u32().get(0));
+            await device.execute(kernel, "main", [out.byteOffset, ptr.byteOffset]);
+
+            // 
+            console.log(out.u32()[5]);
 
         })();
         </script>

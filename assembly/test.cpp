@@ -27,38 +27,14 @@ import <future>;
 // 
 export namespace NAME // For C++20 used
 {
+
+    
+
     // webassembly doesn't support export as object, only as export defaults (you can try rename as "index.add")
-    int* threaded(int threadId, int** managedMemory) EXPORT_NAME("threaded") {
-        //managedMemory[threadId] = threadId;
-        *(managedMemory[threadId]) = threadId;
-        return managedMemory[threadId];
+    int* threaded(int* buffer, int* indices) EXPORT_NAME("threaded") {
+        intptr_t tip = thread_id();
+        buffer[indices[tip]] = tip;
+        return 0;
     }
     
-    // f&ck, it requires external allocator
-    //int* allocate_int(int count) EXPORT_NAME("allocate_int") {
-    //    return new int(count);
-    //}
-    
-    // это говно годиться только для монолитных приложений
-#ifdef ENABLE_PTHREADS
-    int* execute(uint32_t* managedMemory) EXPORT_NAME("execute") {
-        //std::vector<int> results(6);
-        int* results = allocate_int(6);
-        std::vector<std::future<int>> resultsDefer = {};
-        for (uint32_t t=0;t<6;t++) {
-            resultsDefer.push_back(std::async([&]() {
-                //results[t] = threaded(t, managedMemory);
-                return threaded(t, managedMemory);
-            }));
-        }
-        for (uint32_t t=0;t<6;t++) {
-            results[t] = resultsDefer[t].get();
-        }
-        return results;
-    }
-#endif
-    
-    int add(atomic_int a, atomic_int b) EXPORT_NAME("add") {
-        return atomic_fetch_add(&a, b);
-    }
 };

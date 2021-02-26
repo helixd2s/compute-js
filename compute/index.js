@@ -1,7 +1,7 @@
 
 //import * as WT from 'worker_threads';
 
-import { ThisExpression } from 'assemblyscript';
+//import { ThisExpression } from 'assemblyscript';
 
 let WP = new Promise(async (resolve, reject) => {
     if (typeof Worker === "undefined") {
@@ -53,6 +53,7 @@ export class wrapptr {
     get address() { return this.array.address(); };
 };
 
+/*
 export class u8ptr extends wrapptr {
     constructor(buffer, address = 0n, index = 0, wrap = Uint8Array){
         super(buffer, address, index, wrap);
@@ -114,6 +115,7 @@ export class f64ptr extends wrapptr {
         super(buffer, address);
     };
 };
+*/
 
 // manipulate memory by result wrapper
 export class wrapresult {
@@ -126,19 +128,19 @@ export class wrapresult {
     thread(threadID = 0) { return new this.constructor(this.memory, this.results, threadID); };
     get(threadID = 0) { return this.results[this.threadID+threadID]; };
 
-    i8(threadID = 0) { return new i8ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
-    u8(threadID = 0) { return new u8ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
+    i8(threadID = 0) { return new Int8Array(this.memory.buffer, this.results[this.threadID+threadID]); }
+    u8(threadID = 0) { return new Uint8Array(this.memory.buffer, this.results[this.threadID+threadID]); }
 
-    i16(threadID = 0) { return new i16ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
-    u16(threadID = 0) { return new u16ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
+    i16(threadID = 0) { return new Int16Array(this.memory.buffer, this.results[this.threadID+threadID]); }
+    u16(threadID = 0) { return new Uint16Array(this.memory.buffer, this.results[this.threadID+threadID]); }
 
-    i32(threadID = 0) { return new i32ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
-    u32(threadID = 0) { return new u32ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
-    f32(threadID = 0) { return new f32ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
+    i32(threadID = 0) { return new Int32Array(this.memory.buffer, this.results[this.threadID+threadID]); }
+    u32(threadID = 0) { return new Uint32Array(this.memory.buffer, this.results[this.threadID+threadID]); }
+    f32(threadID = 0) { return new Float32Array(this.memory.buffer, this.results[this.threadID+threadID]); }
 
-    i64(threadID = 0) { return new i64ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
-    u64(threadID = 0) { return new u64ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
-    f64(threadID = 0) { return new f64ptr(this.memory.buffer, this.results[this.threadID+threadID]); }
+    i64(threadID = 0) { return new BigInt64Array(this.memory.buffer, this.results[this.threadID+threadID]); }
+    u64(threadID = 0) { return new BigUint64Array(this.memory.buffer, this.results[this.threadID+threadID]); }
+    f64(threadID = 0) { return new Float64Array(this.memory.buffer, this.results[this.threadID+threadID]); }
 };
 
 
@@ -192,7 +194,7 @@ export class device {
                     wasmReady.then((wasmInstance) => {
                         parentPort.postMessage({
                             type: "result",
-                            value: wasmInstance[name].apply(null, [threadID, ...args]),
+                            value: wasmInstance[name].apply(null, [...args]),
                             threadID: threadID,
                             id: id
                         });
@@ -258,11 +260,11 @@ export class device {
     }
 
     bindProgram_(program) {
-        let clonedCode = program.assemblyCode.slice(0);
         let id = this.commandCount++;
         this.results[id] = [];
         this.program = program;
-        for (let i=0;i<threadCount;i++) {
+        for (let i=0;i<this.threadCount;i++) {
+            let clonedCode = program.assemblyCode.slice(0);
             let resolveReject = {};
             let promise = new Promise((resolve, reject)=>{
                 resolveReject.resolve = resolve;
@@ -280,7 +282,7 @@ export class device {
         return Promise.all(this.results[id]);
     }
 
-    execute_(name = "main", ...args) {
+    execute_(name = "main", args) {
         let id = this.commandCount++;
         this.results[id] = [];
         for (let i=0;i<this.threadCount;i++) {
@@ -309,13 +311,18 @@ export class device {
         return this.allocator_.allocate(options.byteSize);
     }
 
+    async finish() {
+        if (this.commandCount > 0) { return Promise.all(this.results[this.commandCount-1]); };
+    }
+
     async execute(program, name = "main", args) {
-        await Promise.all(this.results[this.commandCount-1]); // wait queue
+        await this.finish(); // wait queu
         if (this.program != program) {
             await this.bindProgram_(program);
-            await Promise.all(this.results[this.commandCount-1]); // wait queue
+            await this.finish(); // wait queue
+            
         };
-        return new wrapresult(this.memory, await this.execute_(name, ...args));
+        return new wrapresult(this.memory, await this.execute_(name, args));
     }
 };
 

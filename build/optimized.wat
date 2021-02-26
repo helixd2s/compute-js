@@ -1,7 +1,7 @@
 (module
  (type $i32_i32_=>_i32 (func (param i32 i32) (result i32)))
- (type $i32_=>_i32 (func (param i32) (result i32)))
  (type $i32_i32_=>_none (func (param i32 i32)))
+ (type $i32_=>_i32 (func (param i32) (result i32)))
  (type $i32_=>_none (func (param i32)))
  (type $i32_i32_i32_=>_none (func (param i32 i32 i32)))
  (type $none_=>_none (func))
@@ -1295,19 +1295,19 @@
   local.get $1
   i32.add
  )
- (func $assembly/index/main (param $0 i32) (result i32)
-  (local $1 i32)
+ (func $assembly/index/main (param $0 i32) (param $1 i32) (result i32)
   local.get $0
+  local.get $1
   call $assembly/index/threadInfo.id
   local.tee $0
   i32.const 3
   i32.shl
   i32.add
   i32.load
-  local.tee $1
+  i32.add
   local.get $0
   i32.store
-  local.get $1
+  i32.const 0
  )
  (func $~lib/rt/pure/decrement (param $0 i32)
   (local $1 i32)

@@ -22,6 +22,7 @@
   "license": "ISC",
   "dependencies": {
     "@assemblyscript/loader": "^0.17.2",
+    "http-server": "^0.12.3",
     "wabt": "1.0.20-nightly.20201112"
   },
   "devDependencies": {
