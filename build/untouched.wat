@@ -4,9 +4,9 @@
  (type $i32_=>_i32 (func (param i32) (result i32)))
  (type $i32_=>_none (func (param i32)))
  (type $i32_i32_i32_=>_none (func (param i32 i32 i32)))
+ (type $none_=>_i32 (func (result i32)))
  (type $none_=>_none (func))
  (type $i32_i32_i32_i32_=>_none (func (param i32 i32 i32 i32)))
- (type $none_=>_i32 (func (result i32)))
  (type $i32_i32_i32_=>_i32 (func (param i32 i32 i32) (result i32)))
  (import "env" "memory" (memory $0 (shared 1 256)))
  (data (i32.const 1036) "(\00\00\00\01\00\00\00\00\00\00\00\01\00\00\00(\00\00\00a\00l\00l\00o\00c\00a\00t\00i\00o\00n\00 \00t\00o\00o\00 \00l\00a\00r\00g\00e\00")
@@ -15,6 +15,7 @@
  (data (i32.const 1216) "\03\00\00\00 \00\00\00\00\00\00\00 \00\00\00\00\00\00\00 \00\00\00\00\00\00\00")
  (import "env" "abort" (func $~lib/builtins/abort (param i32 i32 i32 i32)))
  (import "index" "threadInfo.id" (func $assembly/index/threadInfo.id (result i32)))
+ (import "index" "threadInfo.synchronize" (func $assembly/index/threadInfo.synchronize (result i32)))
  (global $~lib/rt/tlsf/ROOT (mut i32) (i32.const 0))
  (global $~lib/rt/__rtti_base i32 (i32.const 1216))
  (export "memory" (memory $0))
@@ -1296,16 +1297,42 @@
   i32.add
  )
  (func $assembly/index/main (param $0 i32) (param $1 i32) (result i32)
+  (local $2 i32)
+  (local $3 i32)
+  local.get $1
+  i32.const 5
+  call $assembly/index/threadInfo.id
+  local.tee $2
+  i32.sub
+  i32.const 3
+  i32.shl
+  i32.add
+  i32.load
+  local.set $3
   local.get $0
   local.get $1
-  call $assembly/index/threadInfo.id
-  local.tee $0
+  local.get $2
   i32.const 3
   i32.shl
   i32.add
   i32.load
   i32.add
+  local.tee $1
+  local.get $2
+  i32.store
+  call $assembly/index/threadInfo.synchronize
+  drop
   local.get $0
+  local.get $3
+  i32.add
+  i32.load
+  local.set $0
+  call $assembly/index/threadInfo.synchronize
+  drop
+  local.get $1
+  local.get $0
+  local.get $2
+  i32.add
   i32.store
   i32.const 0
  )

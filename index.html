@@ -37,7 +37,7 @@
             await device.execute(kernel, "main", [out.address(), ptr.address()]);
 
             // 
-            console.log(out.u32()[5]);
+            console.log(out.u32());
 
         })();
         </script>

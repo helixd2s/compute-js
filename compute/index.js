@@ -75,11 +75,13 @@ export class device {
         this.threadCount = threadCount;
         this.memory = new WebAssembly.Memory({ initial:256, maximum:Math.max(256,Math.ceil(maxMemory/65536)), shared: true });
         this.allocator_ = allocator;
+        this.syncLock = new SharedArrayBuffer(threadCount*4);
 
         let driverURL = encodeDataURL(`
             (async()=>{
                 let parentPort = typeof self != "undefined" ? self : null;
                 let barriers = [];
+                let syncLock = null;
 
                 if (!parentPort) {
                     let WP = typeof require !== "undefined" ? require('worker_threads') : (await import('worker_threads'));
@@ -121,8 +123,10 @@ export class device {
                     id,
                     threadID,
                     memory,
-                    assemblyCode
+                    assemblyCode,
+                    syncLockAB
                 })=>{
+                    syncLock = new Int32Array(syncLockAB);
                     threadInfo.id = threadID;
                     WebAssembly.instantiate(assemblyCode, {
                         env: {
@@ -134,8 +138,6 @@ export class device {
                                 return threadInfo.id;
                             },
                             "threadInfo.synchronize": ()=>{
-                                let done = false;
-
                                 let resolveReject = {};
                                 let promise = new Promise((resolve, reject)=>{
                                     resolveReject.resolve = resolve;
@@ -143,19 +145,34 @@ export class device {
                                 });
                                 
                                 // await sync
-                                promise.then((result)=>{ done = true; });
+                                let done = false;
+                                //promise.then((result)=>{ done = true; 
+                                    
+                                //});
 
-                                // 
+                                // tell to host thread to synchronize workers 
                                 let id = barriers.length;
                                 barriers.push(Object.assign(promise, resolveReject));
                                 parentPort.postMessage({ id: id, type: "synchronize", result: null });
+                                
+                                // you can NOT to await event listeners, so wait when host thread set values
+                                for (let i=0;i<100000000;i++) {
+                                    if (Atomics.compareExchange(syncLock, threadInfo.id, 1, 0) == 1) {
+                                        done = true; break;
+                                    }
+                                }
+
+                                // 
+                                Atomics.store(syncLock, threadInfo.id, 0);
 
                                 // await in thread
                                 // webassembly doesn't support async or await
                                 //let I = 0;
                                 //while (!done) { I++; if (I >= 100000000) { console.error("Synchronization failed"); promise.reject("Synchronization failed"); break; }; };
 
-                                console.error("Not supported operation");
+                                //console.error("Not supported operation, required event listener ping");
+                                
+                                if (!done) { console.error("Synchronization failed"); };
                                 return done;
                             }
                         }
@@ -216,6 +233,12 @@ export class device {
                     if (collected == threadCount) {
                         Promise.all(this.barriers[e.data.id]).then((result)=>{
                             for (let I=0;I<threadCount;I++) {
+                                // enforce to unlock thread
+                                let sysLock = new Int32Array(this.syncLock);
+                                Atomics.store(sysLock, I, 1);
+                                Atomics.notify(sysLock, I, 0, 1);
+
+                                // 
                                 this.threads[I].postMessage({
                                     type: "synchronize",
                                     id: id,
@@ -274,6 +297,7 @@ export class device {
                     id: id,
                     threadID: i,
                     memory: this.memory,
+                    syncLockAB: this.syncLock,
                     assemblyCode: clonedCode,
                     previous: previous
                 }, [clonedCode]);
