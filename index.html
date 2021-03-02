@@ -31,7 +31,7 @@
 
             // map into specific address
             let map = ptr.u64();
-            for (let i=0;i<12;i++) { map[i] = BigInt(i * 4); };
+            for (let i=0;i<16;i++) { map[i] = BigInt(i * 4); };
 
             // 
             await device.execute(kernel, "main", [out.address(), ptr.address()]);
