@@ -52,6 +52,11 @@ export class wrapresult {
 };
 
 
+function bitCount (n) {
+    n = n - ((n >> 1) & 0x55555555)
+    n = (n & 0x33333333) + ((n >> 2) & 0x33333333)
+    return ((n + (n >> 4) & 0xF0F0F0F) * 0x1010101) >> 24
+}
 
 export class program {
     constructor({
@@ -71,17 +76,23 @@ export class device {
         this.barrierCount = 0;
         this.results = {};
         this.collectors = {};
-        this.barriers = {};
         this.threadCount = threadCount;
         this.memory = new WebAssembly.Memory({ initial:256, maximum:Math.max(256,Math.ceil(maxMemory/65536)), shared: true });
         this.allocator_ = allocator;
         this.syncLock = new SharedArrayBuffer(threadCount*4);
+        this.mutexLock = new SharedArrayBuffer(threadCount*4);
+
+        let sysLock = new Int32Array(this.syncLock);
+        for (let i=0;i<this.threadCount;i++) {
+            sysLock[i] = 0;
+        }
 
         let driverURL = encodeDataURL(`
             (async()=>{
                 let parentPort = typeof self != "undefined" ? self : null;
-                let barriers = [];
                 let syncLock = null;
+                let mutexLock = null;
+                let barrierCount = 0;
 
                 if (!parentPort) {
                     let WP = typeof require !== "undefined" ? require('worker_threads') : (await import('worker_threads'));
@@ -118,15 +129,25 @@ export class device {
                     })
                 };
 
+
+                function bitCount (n) {
+                    n = n - ((n >> 1) & 0x55555555)
+                    n = (n & 0x33333333) + ((n >> 2) & 0x33333333)
+                    return ((n + (n >> 4) & 0xF0F0F0F) * 0x1010101) >> 24
+                }
+
                 let initialize = ({
                     type,
                     id,
                     threadID,
                     memory,
                     assemblyCode,
-                    syncLockAB
+                    syncLockAB,
+                    mutexLockAB
                 })=>{
                     syncLock = new Int32Array(syncLockAB);
+                    mutexLock = new Int32Array(mutexLockAB);
+
                     threadInfo.id = threadID;
                     WebAssembly.instantiate(assemblyCode, {
                         env: {
@@ -146,32 +167,21 @@ export class device {
                                 
                                 // await sync
                                 let done = false;
-                                //promise.then((result)=>{ done = true; 
-                                    
-                                //});
+
+                                // 
+                                let threadCount = 6;
+                                let mask = (1<<threadInfo.id)|Atomics.or(syncLock, 0, 1<<threadInfo.id);
 
                                 // tell to host thread to synchronize workers 
-                                let id = barriers.length;
-                                barriers.push(Object.assign(promise, resolveReject));
-                                parentPort.postMessage({ id: id, type: "synchronize", result: null });
-                                
-                                // you can NOT to await event listeners, so wait when host thread set values
+                                parentPort.postMessage({ id: barrierCount++, type: "synchronize", result: mask });
+
+                                // await ready marks
                                 for (let i=0;i<100000000;i++) {
-                                    if (Atomics.compareExchange(syncLock, threadInfo.id, 1, 0) == 1) {
+                                    if (Atomics.compareExchange(mutexLock, threadInfo.id, 1, 0) == 1) {
                                         done = true; break;
                                     }
                                 }
 
-                                // 
-                                Atomics.store(syncLock, threadInfo.id, 0);
-
-                                // await in thread
-                                // webassembly doesn't support async or await
-                                //let I = 0;
-                                //while (!done) { I++; if (I >= 100000000) { console.error("Synchronization failed"); promise.reject("Synchronization failed"); break; }; };
-
-                                //console.error("Not supported operation, required event listener ping");
-                                
                                 if (!done) { console.error("Synchronization failed"); };
                                 return done;
                             }
@@ -204,51 +214,16 @@ export class device {
             
             thread.onmessage = (e) => {
                 if (e.data.type == "synchronize") {
+                    let sysLock = new Int32Array(this.syncLock);
+                    let mutLock = new Int32Array(this.mutexLock);
 
                     // 
-                    if (this.barriers[e.data.id] == null) { this.barriers[e.data.id] = new Array(threadCount); };
-
-                    // 
-                    let resolveReject = {};
-                    let promise = new Promise((resolve, reject)=>{
-                        resolveReject.resolve = async (...args)=>{
-                            //if (prevResult) { await prevResult; };
-                            resolve(...args);
+                    if (Atomics.compareExchange(sysLock, 0, (1<<threadCount)-1, 0) == (1<<threadCount)-1) {
+                        for (let I=0;I<threadCount;I++) {
+                            Atomics.compareExchange(mutLock, I, 0, 1);
                         };
-                        resolveReject.reject = async (...args)=>{
-                            //if (prevResult) { await prevResult; };
-                            reject(...args);
-                        };
-                    });
-                    this.barriers[e.data.id][i] = Object.assign(promise, resolveReject);
-                    if (this.barriers[e.data.id][i]) { this.barriers[e.data.id][i].resolve(); };
-
-                    // 
-                    let collected = 0;
-                    for (let I=0;I<threadCount;I++) {
-                        if (this.barriers[e.data.id][I]) { collected++; };
                     };
 
-                    //
-                    if (collected == threadCount) {
-                        Promise.all(this.barriers[e.data.id]).then((result)=>{
-                            for (let I=0;I<threadCount;I++) {
-                                // enforce to unlock thread
-                                let sysLock = new Int32Array(this.syncLock);
-                                Atomics.store(sysLock, I, 1);
-                                Atomics.notify(sysLock, I, 0, 1);
-
-                                // 
-                                this.threads[I].postMessage({
-                                    type: "synchronize",
-                                    id: id,
-                                    threadID: I
-                                });
-                            };
-                        });
-                    };
-
-                    //this.barriers[id][i].resolve(e.data.result);
                 } else 
                 if (e.data.type == "initialized") {
                     this.results[e.data.id][i].resolve(e.data.result);
@@ -298,6 +273,7 @@ export class device {
                     threadID: i,
                     memory: this.memory,
                     syncLockAB: this.syncLock,
+                    mutexLockAB: this.mutexLock,
                     assemblyCode: clonedCode,
                     previous: previous
                 }, [clonedCode]);
