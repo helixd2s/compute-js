@@ -68,7 +68,10 @@ export class device {
         allocator = null
     }){
         this.commandCount = 0;
+        this.barrierCount = 0;
         this.results = {};
+        this.collectors = {};
+        this.barriers = {};
         this.threadCount = threadCount;
         this.memory = new WebAssembly.Memory({ initial:256, maximum:Math.max(256,Math.ceil(maxMemory/65536)), shared: true });
         this.allocator_ = allocator;
@@ -76,6 +79,7 @@ export class device {
         let driverURL = encodeDataURL(`
             (async()=>{
                 let parentPort = typeof self != "undefined" ? self : null;
+                let barriers = [];
 
                 if (!parentPort) {
                     let WP = typeof require !== "undefined" ? require('worker_threads') : (await import('worker_threads'));
@@ -128,6 +132,31 @@ export class device {
                         index: {
                             "threadInfo.id": ()=>{
                                 return threadInfo.id;
+                            },
+                            "threadInfo.synchronize": ()=>{
+                                let done = false;
+
+                                let resolveReject = {};
+                                let promise = new Promise((resolve, reject)=>{
+                                    resolveReject.resolve = resolve;
+                                    resolveReject.reject = reject;
+                                });
+                                
+                                // await sync
+                                promise.then((result)=>{ done = true; });
+
+                                // 
+                                let id = barriers.length;
+                                barriers.push(Object.assign(promise, resolveReject));
+                                parentPort.postMessage({ id: id, type: "synchronize", result: null });
+
+                                // await in thread
+                                // webassembly doesn't support async or await
+                                //let I = 0;
+                                //while (!done) { I++; if (I >= 100000000) { console.error("Synchronization failed"); promise.reject("Synchronization failed"); break; }; };
+
+                                console.error("Not supported operation");
+                                return done;
                             }
                         }
                     })
@@ -140,7 +169,10 @@ export class device {
                     });
                 };
 
+                let synchronize = ({id})=>{ barriers[id].resolve(); };
+
                 parentPort.addEventListener('message', function(event) {
+                    if (event.data.type == "synchronize") { synchronize(event.data); };
                     if (event.data.type == "initialize") { initialize(event.data); };
                     if (event.data.type == "execute") { execute(event.data); };
                 });
@@ -154,6 +186,47 @@ export class device {
             let thread = new Worker(new URL(driverURL));
             
             thread.onmessage = (e) => {
+                if (e.data.type == "synchronize") {
+
+                    // 
+                    if (this.barriers[e.data.id] == null) { this.barriers[e.data.id] = new Array(threadCount); };
+
+                    // 
+                    let resolveReject = {};
+                    let promise = new Promise((resolve, reject)=>{
+                        resolveReject.resolve = async (...args)=>{
+                            //if (prevResult) { await prevResult; };
+                            resolve(...args);
+                        };
+                        resolveReject.reject = async (...args)=>{
+                            //if (prevResult) { await prevResult; };
+                            reject(...args);
+                        };
+                    });
+                    this.barriers[e.data.id][i] = Object.assign(promise, resolveReject);
+                    if (this.barriers[e.data.id][i]) { this.barriers[e.data.id][i].resolve(); };
+
+                    // 
+                    let collected = 0;
+                    for (let I=0;I<threadCount;I++) {
+                        if (this.barriers[e.data.id][I]) { collected++; };
+                    };
+
+                    //
+                    if (collected == threadCount) {
+                        Promise.all(this.barriers[e.data.id]).then((result)=>{
+                            for (let I=0;I<threadCount;I++) {
+                                this.threads[I].postMessage({
+                                    type: "synchronize",
+                                    id: id,
+                                    threadID: I
+                                });
+                            };
+                        });
+                    };
+
+                    //this.barriers[id][i].resolve(e.data.result);
+                } else 
                 if (e.data.type == "initialized") {
                     this.results[e.data.id][i].resolve(e.data.result);
                 } else 
