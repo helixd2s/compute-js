@@ -15,7 +15,7 @@ export function worker(){
     return WP;
 };
 
-
+// 
 let encodeDataURL = (code, mime = "text/javascript") => {
     if (typeof URL !== "undefined" && typeof Blob !== "undefined") {
         return URL.createObjectURL(new Blob([code], { type: mime }));
@@ -23,99 +23,6 @@ let encodeDataURL = (code, mime = "text/javascript") => {
         return 'data:' + mime + ';' + 'base64' + ',' + Buffer.from(code).toString('base64');
     }
 };
-
-export class wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Uint8Array) {
-        if (buffer.byteOffset != null) {
-            address += buffer.byteOffset;
-        };
-        this.array = new (this.wrap = wrap)(buffer = buffer.buffer || buffer, parseInt(address));
-        this.index = index;
-    };
-
-    // index manipulation
-    assign(number, index=0) { this.array[this.index+index] = number; };
-    set(number, index=0) { this.array[this.index+index] = number; };
-    put(number, index=0) { this.array[this.index+index] = number; };
-    get(index=0) { return this.array[this.index+index]; };
-    idx(index=0) { return new this.constructor(this.array.buffer, this.array.byteOffset, index); };
-    add(index=0) { return new this.constructor(this.array.buffer, this.array.byteOffset, this.index+index); };
-    clone() { return new this.constructor(this.array.buffer, this.array.byteOffset, this.index); };
-
-    // pointer manipulation
-    get buffer() { return this.array.buffer; };
-    get BYTES_PER_ELEMENT() { return this.array.BYTES_PER_ELEMENT; };
-    get address() { return this.array.byteOffset + this.index*this.array.BYTES_PER_ELEMENT; };
-    get value() { return this.array[this.index]; };
-    set value(a) { this.array[this.index] = a; };
-
-    // nodejs available only (with node-native library)
-    get address() { return this.array.address(); };
-};
-
-/*
-export class u8ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Uint8Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class i8ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Int8Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class u16ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Uint16Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class i16ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Int16Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class u32ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Uint32Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class i32ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Int32Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class f32ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = Float32Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class u64ptr extends wrapptr {
-    constructor(buffer, address = 0n, index = 0, wrap = BigUint64Array){
-        super(buffer, address, index, wrap);
-    };
-};
-
-export class i64ptr extends wrapptr {
-    constructor(buffer, address = 0n){
-        this.wrap = BigInt64Array;
-        super(buffer, address);
-    };
-};
-
-export class f64ptr extends wrapptr {
-    constructor(buffer, address = 0n){
-        this.wrap = Float64Array;
-        super(buffer, address);
-    };
-};
-*/
 
 // manipulate memory by result wrapper
 export class wrapresult {
@@ -268,45 +175,74 @@ export class device {
     }
 
     bindProgram_(program) {
+        let prevResult = this.commandCount > 0 ? this.results[this.commandCount-1] : null;
         let id = this.commandCount++;
         this.results[id] = [];
         this.program = program;
         for (let i=0;i<this.threadCount;i++) {
             let clonedCode = program.assemblyCode.slice(0);
             let resolveReject = {};
-            let promise = new Promise((resolve, reject)=>{
-                resolveReject.resolve = resolve;
-                resolveReject.reject = reject;
+            let promise = new Promise(async (resolve, reject)=>{
+                resolveReject.resolve = async (...args)=>{
+                    //if (prevResult) { await prevResult; };
+                    resolve(...args);
+                };
+                resolveReject.reject = async (...args)=>{
+                    //if (prevResult) { await prevResult; };
+                    reject(...args);
+                };
+                if (prevResult) { await prevResult; };
             });
             this.results[id].push(Object.assign(promise, resolveReject));
-            this.threads[i].postMessage({
-                type: "initialize",
-                id: id,
-                threadID: i,
-                memory: this.memory,
-                assemblyCode: clonedCode
-            }, [clonedCode]);
+
+            let exec = (previous)=>{
+                this.threads[i].postMessage({
+                    type: "initialize",
+                    id: id,
+                    threadID: i,
+                    memory: this.memory,
+                    assemblyCode: clonedCode,
+                    previous: previous
+                }, [clonedCode]);
+            };
+            if (prevResult) { prevResult.then(exec).catch((error)=>{ console.error(error); }); } else (exec());
+        
         };
         return Promise.all(this.results[id]);
     }
 
     execute_(name = "main", args) {
+        let prevResult = this.commandCount > 0 ? Promise.all(this.results[this.commandCount-1]) : null;
         let id = this.commandCount++;
         this.results[id] = [];
         for (let i=0;i<this.threadCount;i++) {
             let resolveReject = {};
-            let promise = new Promise((resolve, reject)=>{
-                resolveReject.resolve = resolve;
-                resolveReject.reject = reject;
+            let promise = new Promise(async (resolve, reject)=>{
+                resolveReject.resolve = async (...args)=>{
+                    //if (prevResult) { await prevResult; };
+                    resolve(...args);
+                };
+                resolveReject.reject = async (...args)=>{
+                    //if (prevResult) { await prevResult; };
+                    reject(...args);
+                };
+                // wait all results of command
+                if (prevResult) { await prevResult; };
             });
             this.results[id].push(Object.assign(promise, resolveReject));
-            this.threads[i].postMessage({
-                type: "execute",
-                name: name,
-                id: id,
-                threadID: i,
-                args: args
-            });
+
+            let exec = (previous)=>{
+                this.threads[i].postMessage({
+                    type: "execute",
+                    name: name,
+                    id: id,
+                    threadID: i,
+                    args: args,
+                    previous: previous
+                });
+            };
+            if (prevResult) { prevResult.then(exec).catch((error)=>{ console.error(error); }); } else (exec());
+            
         };
         return Promise.all(this.results[id]);
     }
@@ -324,10 +260,8 @@ export class device {
     }
 
     async execute(program, name = "main", args) {
-        await this.finish(); // wait queue
         if (this.program != program) {
             await this.bindProgram_(program);
-            await this.finish(); // wait queue
         };
         return new wrapresult(this.memory, await this.execute_(name, args));
     }
