@@ -9,9 +9,10 @@ declare namespace threadInfo {
 }
 
 // executor (in C++ it harder)
-export function main(buffer: usize, indices: usize): u32 {
+export function main(buffer: usize, offsets: usize): u32 {
   let tip: u32 = threadInfo.id();
-  let ptr: usize = load<usize>(indices+tip*8);
+  let ptr: usize = load<usize>(offsets+tip*8);
   store<u32>(buffer+ptr, tip);
   return 0;
+  //return buffer+ptr;
 }

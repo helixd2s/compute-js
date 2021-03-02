@@ -34,7 +34,7 @@
             for (let i=0;i<12;i++) { map[i] = BigInt(i * 4); };
 
             // 
-            await device.execute(kernel, "main", [out.byteOffset, ptr.byteOffset]);
+            await device.execute(kernel, "main", [out.address(), ptr.address()]);
 
             // 
             console.log(out.u32()[5]);

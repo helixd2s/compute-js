@@ -125,6 +125,7 @@ export class wrapresult {
         this.threadID = threadID;
     }
 
+    address(threadID = 0) { return this.results[this.threadID+threadID]; };
     thread(threadID = 0) { return new this.constructor(this.memory, this.results, threadID); };
     get(threadID = 0) { return this.results[this.threadID+threadID]; };
 
@@ -194,13 +195,13 @@ export class device {
                     wasmReady.then((wasmInstance) => {
                         parentPort.postMessage({
                             type: "result",
-                            value: wasmInstance[name].apply(null, [...args]),
+                            result: wasmInstance[name].apply(null, [...args]),
                             threadID: threadID,
                             id: id
                         });
                     })
                     .catch((error) => {
-                        parentPort.postMessage({ id: id, type: "error", result: null });
+                        parentPort.postMessage({ id: id, type: "error", error: error });
                     })
                 };
 
@@ -222,12 +223,16 @@ export class device {
                                 return threadInfo.id;
                             }
                         }
-                    }).then(async (instantiatedModule) => {
+                    })
+                    .then(async (instantiatedModule) => {
                         wasmResolve(instantiatedModule.instance.exports);
-                        parentPort.postMessage({ type: "initialized" });
+                        parentPort.postMessage({ id: id, type: "initialized", result: null });
+                    })
+                    .catch((error) => {
+                        parentPort.postMessage({ id: id, type: "error", error: error });
                     });
                 };
-                
+
                 parentPort.addEventListener('message', function(event) {
                     if (event.data.type == "initialize") { initialize(event.data); };
                     if (event.data.type == "execute") { execute(event.data); };
@@ -242,11 +247,14 @@ export class device {
             let thread = new Worker(new URL(driverURL));
             
             thread.onmessage = (e) => {
+                if (e.data.type == "initialized") {
+                    this.results[e.data.id][i].resolve(e.data.result);
+                } else 
                 if (e.data.type == "result") {
-                    this.results[e.data.id][i].resolve(e.data.value);
+                    this.results[e.data.id][i].resolve(e.data.result);
                 } else 
                 if (e.data.type == "error") {
-                    this.results[e.data.id][i].reject(e.data.value);
+                    this.results[e.data.id][i].reject(e.data.error);
                 };
             };
             
@@ -316,11 +324,10 @@ export class device {
     }
 
     async execute(program, name = "main", args) {
-        await this.finish(); // wait queu
+        await this.finish(); // wait queue
         if (this.program != program) {
             await this.bindProgram_(program);
             await this.finish(); // wait queue
-            
         };
         return new wrapresult(this.memory, await this.execute_(name, args));
     }
